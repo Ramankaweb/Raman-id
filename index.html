@@ -1,283 +1,307 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo & Video Sharing Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1e3a8a, #4c1d95);
+            min-height: 100vh;
+            color: #e5e7eb;
+        }
+        .post-card {
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .post-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 15px rgba(147, 51, 234, 0.5);
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .btn-glow {
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .btn-glow:hover {
+            box-shadow: 0 0 10px rgba(147, 51, 234, 0.7);
+        }
+    </style>
 </head>
-<body class="bg-gray-100 font-sans">
+<body class="font-sans">
     <!-- Navigation Bar -->
-    <nav class="bg-blue-600 text-white p-4 flex justify-between items-center">
+    <nav class="bg-gradient-to-r from-indigo-900 to-purple-900 text-white p-4 flex justify-between items-center shadow-lg">
         <div class="flex items-center space-x-4">
-            <a href="#" id="homeIcon" class="text-2xl">🏠</a>
-            <input type="text" id="searchBar" placeholder="Search posts..." class="p-2 rounded text-black">
+            <a href="#" id="homeIcon" class="text-2xl hover:text-purple-300">🏠</a>
+            <input type="text" id="searchBar" placeholder="Search posts..." class="p-2 rounded bg-gray-800 text-white border-none focus:ring-2 focus:ring-purple-500">
         </div>
         <div class="flex items-center space-x-4">
-            <a href="#" id="profileLink" class="text-lg">Profile</a>
-            <button id="logoutBtn" class="bg-red-500 px-4 py-2 rounded hidden">Logout</button>
+            <a href="#" id="profileLink" class="text-lg hover:text-purple-300">Profile</a>
+            <button id="logoutBtn" class="bg-red-600 px-4 py-2 rounded btn-glow hidden">Logout</button>
         </div>
     </nav>
 
     <!-- Main Container -->
     <div class="container mx-auto p-6">
         <!-- Login/Register Section -->
-        <div id="authSection" class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
-            <h2 id="authTitle" class="text-2xl font-bold mb-4 text-center">Login</h2>
-            <input type="text" id="username" placeholder="Username (for Register)" class="w-full p-2 mb-4 border rounded hidden">
-            <input type="email" id="email" placeholder="Email" class="w-full p-2 mb-4 border rounded">
-            <input type="password" id="password" placeholder="Password" class="w-full p-2 mb-4 border rounded">
-            <button id="authBtn" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Login</button>
+        <div id="authSection" class="max-w-md mx-auto bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h2 id="authTitle" class="text-2xl font-bold mb-4 text-center text-purple-300">Login</h2>
+            <input type="text" id="username" placeholder="Username (for Register)" class="w-full p-2 mb-4 border rounded bg-gray-700 text-white border-gray-600 hidden focus:ring-2 focus:ring-purple-500">
+            <input type="email" id="email" placeholder="Email" class="w-full p-2 mb-4 border rounded bg-gray-700 text-white border-gray-600 focus:ring-2 focus:ring-purple-500">
+            <div class="relative mb-4">
+                <input type="password" id="password" placeholder="Password" class="w-full p-2 border rounded bg-gray-700 text-white border-gray-600 focus:ring-2 focus:ring-purple-500">
+                <button id="togglePassword" class="absolute right-2 top-2 text-gray-400 hover:text-purple-300">👁️</button>
+            </div>
+            <button id="authBtn" class="w-full bg-purple-600 text-white p-2 rounded btn-glow hover:bg-purple-700">Login</button>
             <p class="text-center mt-4">
-                <a href="#" id="toggleAuth" class="text-blue-600">Register instead</a>
+                <a href="#" id="toggleAuth" class="text-purple-300 hover:text-purple-400">Register instead</a>
             </p>
         </div>
 
         <!-- Upload Section (Hidden until logged in) -->
-        <div id="uploadSection" class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md mt-6 hidden">
-            <h2 class="text-2xl font-bold mb-4 text-center">Upload Photo/Video</h2>
-            <input type="text" id="postTitle" placeholder="Post Title" class="w-full p-2 mb-4 border rounded">
-            <input type="file" id="mediaInput" accept="image/*,video/*" class="w-full p-2 mb-4 border rounded">
-            <button id="uploadBtn" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Upload</button>
+        <div id="uploadSection" class="max-w-md mx-auto bg-gray-800 p-6 rounded-lg shadow-lg mt-6 hidden">
+            <h2 class="text-2xl font-bold mb-4 text-center text-purple-300">Upload Photo/Video</h2>
+            <input type="text" id="postTitle" placeholder="Post Title" class="w-full p-2 mb-4 border rounded bg-gray-700 text-white border-gray-600 focus:ring-2 focus:ring-purple-500">
+            <input type="file" id="mediaInput" accept="image/*,video/*" class="w-full p-2 mb-4 border rounded bg-gray-700 text-white border-gray-600">
+            <button id="uploadBtn" class="w-full bg-purple-600 text-white p-2 rounded btn-glow hover:bg-purple-700">Upload & Generate XML</button>
         </div>
 
         <!-- Posts Section -->
-        <div id="postsSection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+        <div id="postsSection" class="grid grid-cols-床1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
             <!-- Posts will be dynamically added here -->
         </div>
+</div>
+
+<!-- Profile Modal -->
+<div id="profileModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden">
+    <div class="bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full">
+        <h2 class="text-2xl font-bold mb-4 text-purple-300">Profile</h2>
+        <p id="profileUsername" class="mb-4 text-white"></p>
+        <p id="profileEmail" class="mb-4 text-white"></p>
+        <p id="postCount" class="mb-4 text-white"></p>
+        <button id="closeProfile" class="bg-red-600 text-white p-2 rounded btn-glow hover:bg-red-700">Close</button>
     </div>
+</div>
 
-    <!-- Profile Modal -->
-    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md max-w-md w-full">
-            <h2 class="text-2xl font-bold mb-4">Profile</h2>
-            <p id="profileUsername" class="mb-4"></p>
-            <p id="profileEmail" class="mb-4"></p>
-            <button id="closeProfile" class="bg-red-500 text-white p-2 rounded">Close</button>
-        </div>
-    </div>
-
-    <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            // Replace with your Firebase project config
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-
-        // DOM Elements
-        const authSection = document.getElementById('authSection');
-        const usernameInput = document.getElementById('username');
-        const emailInput = document.getElementById('email');
-        const passwordInput = document.getElementById('password');
-        const authBtn = document.getElementById('authBtn');
-        const authTitle = document.getElementById('authTitle');
-        const toggleAuth = document.getElementById('toggleAuth');
-        const uploadSection = document.getElementById('uploadSection');
-        const postTitle = document.getElementById('postTitle');
-        const mediaInput = document.getElementById('mediaInput');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const postsSection = document.getElementById('postsSection');
-        const profileLink = document.getElementById('profileLink');
-        const profileModal = document.getElementById('profileModal');
-        const profileUsername = document.getElementById('profileUsername');
-        const profileEmail = document.getElementById('profileEmail');
-        const closeProfile = document.getElementById('closeProfile');
-        const logoutBtn = document.getElementById('logoutBtn');
-        const searchBar = document.getElementById('searchBar');
-
-        let isLogin = true;
-
-        // Toggle between Login and Register
-        toggleAuth.addEventListener('click', () => {
-            isLogin = !isLogin;
-            authTitle.textContent = isLogin ? 'Login' : 'Register';
-            authBtn.textContent = isLogin ? 'Login' : 'Register';
-            toggleAuth.textContent = isLogin ? 'Register instead' : 'Login instead';
-            usernameInput.classList.toggle('hidden', isLogin);
-        });
-
-        // Authentication
-        authBtn.addEventListener('click', () => {
-            const email = emailInput.value;
-            const password = passwordInput.value;
-            const username = usernameInput.value;
-
-            if (isLogin) {
-                auth.signInWithEmailAndPassword(email, password)
-                    .then(userCredential => {
-                        showMainContent(userCredential.user);
-                    })
-                    .catch(error => alert('Login failed: ' + error.message));
-            } else {
-                auth.createUserWithEmailAndPassword(email, password)
-                    .then(userCredential => {
-                        userCredential.user.updateProfile({ displayName: username })
-                            .then(() => showMainContent(userCredential.user));
-                    })
-                    .catch(error => alert('Registration failed: ' + error.message));
-            }
-        });
-
-        // Show main content after login
-        function showMainContent(user) {
-            authSection.classList.add('hidden');
-            uploadSection.classList.remove('hidden');
-            logoutBtn.classList.remove('hidden');
-            profileUsername.textContent = `Username: ${user.displayName || 'N/A'}`;
-            profileEmail.textContent = `Email: ${user.email}`;
-            fetchPosts();
+<script>
+    // Simple hash function for passwords (not secure for production)
+    function simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0; // Convert to 32bit integer
         }
+        return hash;
+    }
 
-        // Logout
-        logoutBtn.addEventListener('click', () => {
-            auth.signOut().then(() => {
-                authSection.classList.remove('hidden');
-                uploadSection.classList.add('hidden');
-                logoutBtn.classList.add('hidden');
-                postsSection.innerHTML = '';
-            });
-        });
+    // DOM Elements
+    const authSection = document.getElementById('authSection');
+    const usernameInput = document.getElementById('username');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const togglePassword = document.getElementById('togglePassword');
+    const authBtn = document.getElementById('authBtn');
+    const authTitle = document.getElementById('authTitle');
+    const toggleAuth = document.getElementById('toggleAuth');
+    const uploadSection = document.getElementById('uploadSection');
+    const postTitle = document.getElementById('postTitle');
+    const mediaInput = document.getElementById('mediaInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const postsSection = document.getElementById('postsSection');
+    const profileLink = document.getElementById('profileLink');
+    const profileModal = document.getElementById('profileModal');
+    const profileUsername = document.getElementById('profileUsername');
+    const profileEmail = document.getElementById('profileEmail');
+    const closeProfile = document.getElementById('closeProfile');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const searchBar = document.getElementById('searchBar');
 
-        // Profile Modal
-        profileLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            profileModal.classList.remove('hidden');
-        });
+    let isLogin = true;
+    let currentUser = null;
 
-        closeProfile.addEventListener('click', () => {
-            profileModal.classList.add('hidden');
-        });
+    // Load users and posts from localStorage
+    let users = JSON.parse(localStorage.getItem('users')) || [];
+    let posts = JSON.parse(localStorage.getItem('posts')) || [];
 
-        // Upload to Blogger
-        uploadBtn.addEventListener('click', () => {
-            const title = postTitle.value;
-            const file = mediaInput.files[0];
-            if (!title || !file) {
-                alert('Please provide a title and select a file.');
+    // Show/Hide Password
+    togglePassword.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        togglePassword.textContent = isPassword ? '🙈' : '👁️';
+    });
+
+    // Toggle between Login and Register
+    toggleAuth.addEventListener('click', (e) => {
+        e.preventDefault();
+        isLogin = !isLogin;
+        authTitle.textContent = isLogin ? 'Login' : 'Register';
+        authBtn.textContent = isLogin ? 'Login' : 'Register';
+        toggleAuth.textContent = isLogin ? 'Register instead' : 'Login instead';
+        usernameInput.classList.toggle('hidden', isLogin);
+    });
+
+    // Authentication
+    authBtn.addEventListener('click', () => {
+        const email = emailInput.value;
+        const password = passwordInput.value;
+        const username = usernameInput.value;
+
+        if (isLogin) {
+            const user = users.find(u => u.email === email && u.password === simpleHash(password));
+            if (user) {
+                currentUser = user;
+                showMainContent();
+            } else {
+                alert('Invalid email or password.');
+            }
+        } else {
+            if (!username || !email || !password) {
+                alert('Please fill all fields.');
                 return;
             }
+            if (users.find(u => u.email === email)) {
+                alert('Email already registered.');
+                return;
+            }
+            const newUser = { username, email, password: simpleHash(password) };
+            users.push(newUser);
+            localStorage.setItem('users', JSON.stringify(users));
+            currentUser = newUser;
+            showMainContent();
+        }
+    });
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const base64Data = e.target.result.split(',')[1];
-                const isVideo = file.type.startsWith('video');
-                const xml = `
-                    <?xml version="1.0" encoding="UTF-8"?>
-                    <entry xmlns="http://www.w3.org/2005/Atom">
-                        <title type="text">${title}</title>
-                        <content type="html">
-                            ${isVideo ? 
-                                `<video controls><source src="data:video/mp4;base64,${base64Data}" type="video/mp4"></video>` :
-                                `<img src="data:image/jpeg;base64,${base64Data}" alt="${title}" style="max-width:100%;border-radius:10px;">`
-                            }
-                        </content>
-                        <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/blogger/2008/kind#post"/>
-                    </entry>
-                `;
+    // Show main content after login
+    function showMainContent() {
+        authSection.classList.add('hidden');
+        uploadSection.classList.remove('hidden');
+        logoutBtn.classList.remove('hidden');
+        profileUsername.textContent = `Username: ${currentUser.username}`;
+        profileEmail.textContent = `Email: ${currentUser.email}`;
+        fetchPosts();
+    }
 
-                // Replace with your Blogger API credentials and blog ID
-                fetch('https://www.googleapis.com/blogger/v3/blogs/YOUR_BLOG_ID/posts?key=YOUR_API_KEY', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/atom+xml' },
-                    body: xml
-                })
-                .then(response => response.json())
-                .then(data => {
-                    alert('Post uploaded successfully!');
-                    fetchPosts();
-                    postTitle.value = '';
-                    mediaInput.value = '';
-                })
-                .catch(error => alert('Upload failed: ' + error.message));
-            };
-            reader.readAsDataURL(file);
-        });
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+        currentUser = null;
+        authSection.classList.remove('hidden');
+        uploadSection.classList.add('hidden');
+        logoutBtn.classList.add('hidden');
+        postsSection.innerHTML = '';
+        emailInput.value = '';
+        passwordInput.value = '';
+        usernameInput.value = '';
+        passwordInput.type = 'password';
+        togglePassword.textContent = '👁️';
+    });
 
-        // Fetch Posts from Blogger
-        function fetchPosts(query = '') {
-            // Replace with your Blogger API credentials and blog ID
-            fetch(`https://www.googleapis.com/blogger/v3/blogs/YOUR_BLOG_ID/posts?key=YOUR_API_KEY${query ? `&q=${query}` : ''}`)
-                .then(response => response.json())
-                .then(data => {
-                    postsSection.innerHTML = '';
-                    data.items.forEach(post => {
-                        const postElement = document.createElement('div');
-                        postElement.className = 'bg-white p-4 rounded-lg shadow-md';
-                        postElement.innerHTML = `
-                            <h3 class="text-xl font-bold mb-2">${post.title}</h3>
-                            <div>${post.content}</div>
-                            <p class="text-gray-500 text-sm mt-2">Posted on ${new Date(post.published).toLocaleDateString()}</p>
-                        `;
-                        postsSection.appendChild(postElement);
-                    });
-                })
-                .catch(error => console.error('Error fetching posts:', error));
+    // Profile Modal
+    profileLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (currentUser) {
+            profileModal.classList.remove('hidden');
+        }
+    });
+
+    closeProfile.addEventListener('click', () => {
+        profileModal.classList.add('hidden');
+    });
+
+    // Upload Post and Generate XML
+    uploadBtn.addEventListener('click', () => {
+        const title = postTitle.value;
+        const file = mediaInput.files[0];
+        if (!title || !file) {
+            alert('Please provide a title and select a file.');
+            return;
         }
 
-        // Search Functionality
-        searchBar.addEventListener('input', () => {
-            const query = searchBar.value.trim();
-            fetchPosts(query);
-        });
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Data = e.target.result.split(',')[1];
+            const isVideo = file.type.startsWith('video');
+            const post = {
+                id: Date.now(),
+                title,
+                media: e.target.result,
+                isVideo,
+                timestamp: new Date().toISOString(),
+                username: currentUser.username
+            };
+            posts.push(post);
+            localStorage.setItem('posts', JSON.stringify(posts));
 
-        // Check Auth State
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                showMainContent(user);
-            } else {
-                authSection.classList.remove('hidden');
-                uploadSection.classList.add('hidden');
-                logoutBtn.classList.add('hidden');
-            }
+            // Generate XML for Blogger
+            const xml = `
+                <?xml version="1.0" encoding="UTF-8"?>
+                <entry xmlns="http://www.w3.org/2005/Atom">
+                    <title type="text">${title}</title>
+                    <content type="html">
+                        ${isVideo ? 
+                            `<video controls><source src="${post.media}" type="${file.type}"></video>` :
+                            `<img src="${post.media}" alt="${title}" style="max-width:100%;border-radius:10px;">`
+                        }
+                        <p>Posted by ${currentUser.username}</p>
+                    </content>
+                    <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/blogger/2008/kind#post"/>
+                </entry>
+            `;
+
+            // Download XML file
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${title.replace(/\s+/g, '_')}.xml`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            alert('Post uploaded and XML file generated! Download the XML and import it to Blogger.');
+            fetchPosts();
+            postTitle.value = '';
+            mediaInput.value = '';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // Fetch and Display Posts
+    function fetchPosts(query = '') {
+        postsSection.innerHTML = '';
+        const filteredPosts = query ? 
+            posts.filter(post => post.title.toLowerCase().includes(query.toLowerCase())) : 
+            posts;
+        filteredPosts.forEach(post => {
+            const postElement = document.createElement('div');
+            postElement.className = 'post-card bg-gray-800 p-4 rounded-lg shadow-lg fade-in';
+            postElement.innerHTML = `
+                <h3 class="text-xl font-bold mb-2 text-purple-300">${post.title}</h3>
+                ${post.isVideo ? 
+                    `<video controls class="w-full rounded-lg"><source src="${post.media}" type="video/mp4"></video>` :
+                    `<img src="${post.media}" alt="${post.title}" class="w-full rounded-lg">`
+                }
+                <p class="text-gray-400 text-sm mt-2">Posted by ${post.username} on ${new Date(post.timestamp).toLocaleDateString()}</p>
+            `;
+            postsSection.appendChild(postElement);
         });
-    </script>
+    }
+
+    // Search Functionality
+    searchBar.addEventListener('input', () => {
+        const query = searchBar.value.trim();
+        fetchPosts(query);
+    });
+
+    // Home Icon
+    document.getElementById('homeIcon').addEventListener('click', (e) => {
+        e.preventDefault();
+        searchBar.value = '';
+        fetchPosts();
+    });
+</script>
 </body>
 </html>
