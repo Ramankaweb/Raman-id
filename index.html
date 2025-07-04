@@ -1,0 +1,283 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo & Video Sharing Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <!-- Navigation Bar -->
+    <nav class="bg-blue-600 text-white p-4 flex justify-between items-center">
+        <div class="flex items-center space-x-4">
+            <a href="#" id="homeIcon" class="text-2xl">🏠</a>
+            <input type="text" id="searchBar" placeholder="Search posts..." class="p-2 rounded text-black">
+        </div>
+        <div class="flex items-center space-x-4">
+            <a href="#" id="profileLink" class="text-lg">Profile</a>
+            <button id="logoutBtn" class="bg-red-500 px-4 py-2 rounded hidden">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container mx-auto p-6">
+        <!-- Login/Register Section -->
+        <div id="authSection" class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 id="authTitle" class="text-2xl font-bold mb-4 text-center">Login</h2>
+            <input type="text" id="username" placeholder="Username (for Register)" class="w-full p-2 mb-4 border rounded hidden">
+            <input type="email" id="email" placeholder="Email" class="w-full p-2 mb-4 border rounded">
+            <input type="password" id="password" placeholder="Password" class="w-full p-2 mb-4 border rounded">
+            <button id="authBtn" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Login</button>
+            <p class="text-center mt-4">
+                <a href="#" id="toggleAuth" class="text-blue-600">Register instead</a>
+            </p>
+        </div>
+
+        <!-- Upload Section (Hidden until logged in) -->
+        <div id="uploadSection" class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md mt-6 hidden">
+            <h2 class="text-2xl font-bold mb-4 text-center">Upload Photo/Video</h2>
+            <input type="text" id="postTitle" placeholder="Post Title" class="w-full p-2 mb-4 border rounded">
+            <input type="file" id="mediaInput" accept="image/*,video/*" class="w-full p-2 mb-4 border rounded">
+            <button id="uploadBtn" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Upload</button>
+        </div>
+
+        <!-- Posts Section -->
+        <div id="postsSection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            <!-- Posts will be dynamically added here -->
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-md max-w-md w-full">
+            <h2 class="text-2xl font-bold mb-4">Profile</h2>
+            <p id="profileUsername" class="mb-4"></p>
+            <p id="profileEmail" class="mb-4"></p>
+            <button id="closeProfile" class="bg-red-500 text-white p-2 rounded">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            // Replace with your Firebase project config
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        // DOM Elements
+        const authSection = document.getElementById('authSection');
+        const usernameInput = document.getElementById('username');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const authBtn = document.getElementById('authBtn');
+        const authTitle = document.getElementById('authTitle');
+        const toggleAuth = document.getElementById('toggleAuth');
+        const uploadSection = document.getElementById('uploadSection');
+        const postTitle = document.getElementById('postTitle');
+        const mediaInput = document.getElementById('mediaInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const postsSection = document.getElementById('postsSection');
+        const profileLink = document.getElementById('profileLink');
+        const profileModal = document.getElementById('profileModal');
+        const profileUsername = document.getElementById('profileUsername');
+        const profileEmail = document.getElementById('profileEmail');
+        const closeProfile = document.getElementById('closeProfile');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const searchBar = document.getElementById('searchBar');
+
+        let isLogin = true;
+
+        // Toggle between Login and Register
+        toggleAuth.addEventListener('click', () => {
+            isLogin = !isLogin;
+            authTitle.textContent = isLogin ? 'Login' : 'Register';
+            authBtn.textContent = isLogin ? 'Login' : 'Register';
+            toggleAuth.textContent = isLogin ? 'Register instead' : 'Login instead';
+            usernameInput.classList.toggle('hidden', isLogin);
+        });
+
+        // Authentication
+        authBtn.addEventListener('click', () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            const username = usernameInput.value;
+
+            if (isLogin) {
+                auth.signInWithEmailAndPassword(email, password)
+                    .then(userCredential => {
+                        showMainContent(userCredential.user);
+                    })
+                    .catch(error => alert('Login failed: ' + error.message));
+            } else {
+                auth.createUserWithEmailAndPassword(email, password)
+                    .then(userCredential => {
+                        userCredential.user.updateProfile({ displayName: username })
+                            .then(() => showMainContent(userCredential.user));
+                    })
+                    .catch(error => alert('Registration failed: ' + error.message));
+            }
+        });
+
+        // Show main content after login
+        function showMainContent(user) {
+            authSection.classList.add('hidden');
+            uploadSection.classList.remove('hidden');
+            logoutBtn.classList.remove('hidden');
+            profileUsername.textContent = `Username: ${user.displayName || 'N/A'}`;
+            profileEmail.textContent = `Email: ${user.email}`;
+            fetchPosts();
+        }
+
+        // Logout
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut().then(() => {
+                authSection.classList.remove('hidden');
+                uploadSection.classList.add('hidden');
+                logoutBtn.classList.add('hidden');
+                postsSection.innerHTML = '';
+            });
+        });
+
+        // Profile Modal
+        profileLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            profileModal.classList.remove('hidden');
+        });
+
+        closeProfile.addEventListener('click', () => {
+            profileModal.classList.add('hidden');
+        });
+
+        // Upload to Blogger
+        uploadBtn.addEventListener('click', () => {
+            const title = postTitle.value;
+            const file = mediaInput.files[0];
+            if (!title || !file) {
+                alert('Please provide a title and select a file.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                const isVideo = file.type.startsWith('video');
+                const xml = `
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <entry xmlns="http://www.w3.org/2005/Atom">
+                        <title type="text">${title}</title>
+                        <content type="html">
+                            ${isVideo ? 
+                                `<video controls><source src="data:video/mp4;base64,${base64Data}" type="video/mp4"></video>` :
+                                `<img src="data:image/jpeg;base64,${base64Data}" alt="${title}" style="max-width:100%;border-radius:10px;">`
+                            }
+                        </content>
+                        <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/blogger/2008/kind#post"/>
+                    </entry>
+                `;
+
+                // Replace with your Blogger API credentials and blog ID
+                fetch('https://www.googleapis.com/blogger/v3/blogs/YOUR_BLOG_ID/posts?key=YOUR_API_KEY', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/atom+xml' },
+                    body: xml
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert('Post uploaded successfully!');
+                    fetchPosts();
+                    postTitle.value = '';
+                    mediaInput.value = '';
+                })
+                .catch(error => alert('Upload failed: ' + error.message));
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Fetch Posts from Blogger
+        function fetchPosts(query = '') {
+            // Replace with your Blogger API credentials and blog ID
+            fetch(`https://www.googleapis.com/blogger/v3/blogs/YOUR_BLOG_ID/posts?key=YOUR_API_KEY${query ? `&q=${query}` : ''}`)
+                .then(response => response.json())
+                .then(data => {
+                    postsSection.innerHTML = '';
+                    data.items.forEach(post => {
+                        const postElement = document.createElement('div');
+                        postElement.className = 'bg-white p-4 rounded-lg shadow-md';
+                        postElement.innerHTML = `
+                            <h3 class="text-xl font-bold mb-2">${post.title}</h3>
+                            <div>${post.content}</div>
+                            <p class="text-gray-500 text-sm mt-2">Posted on ${new Date(post.published).toLocaleDateString()}</p>
+                        `;
+                        postsSection.appendChild(postElement);
+                    });
+                })
+                .catch(error => console.error('Error fetching posts:', error));
+        }
+
+        // Search Functionality
+        searchBar.addEventListener('input', () => {
+            const query = searchBar.value.trim();
+            fetchPosts(query);
+        });
+
+        // Check Auth State
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                showMainContent(user);
+            } else {
+                authSection.classList.remove('hidden');
+                uploadSection.classList.add('hidden');
+                logoutBtn.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
